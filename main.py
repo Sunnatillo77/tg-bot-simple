@@ -15,7 +15,7 @@ bot = telebot.TeleBot(TOKEN)
 @bot.message_handler(commands=['start'])
 def start(message):
     bot.reply_to(message, "Привет! Я твой первый бот! Напиши /help")
-
+#111
 @bot.message_handler(commands=['help'])
 def help_cmd(message):  # Добавлено тело функции
     bot.reply_to(message, "Доступные команды: /start, /help")
