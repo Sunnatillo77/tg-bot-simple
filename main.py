@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 import telebot
-#ТЕСТ
+
 # Загрузка переменных окружения
 load_dotenv()
 # Получение токена бота
