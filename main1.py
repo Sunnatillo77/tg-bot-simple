@@ -170,7 +170,7 @@ def weather_cmd(message):
 
 @bot.callback_query_handler(func=lambda c: c.data.startswith("confirm:"))
 def on_confirm(c):
-    # Извлекаем выбор пользователя
+    # Извлекаем выбор пользоватля
     choice = c.data.split(":", 1)[1]  # "yes" или "no"
 
     # Показываем "тик" на нажатой кнопке
