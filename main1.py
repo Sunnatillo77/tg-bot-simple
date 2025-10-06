@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 
 bot = telebot.TeleBot(TOKEN)
-BOT_INFO = {"version": "1", "author": "Базлов Владимир Андреевич", "purpose": "Обучение"}
+BOT_INFO = {"version": "1", "author": "Махмудов Суннатилло", "purpose": "Обучение"}
 
 
 def fetch_weather_moscow_open_meteo() -> str:
