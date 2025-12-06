@@ -1,131 +1,101 @@
 import sqlite3
-import logging
-import os
-from dotenv import load_dotenv
+from typing import List, Optional
 
-load_dotenv()
 
-DB_PATH = os.getenv("DB_PATH", "bot.db")
-logger = logging.getLogger(__name__)
+class Database:
+    def __init__(self, db_path: str = "bot.db"):
+        self.db_path = db_path
+        self.init_database()
 
-def _connect():
-    """Создание подключения к базе данных с оптимизацией"""
-    conn = sqlite3.connect(DB_PATH, timeout=5.0)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA busy_timeout = 5000")
-    return conn
+    def init_database(self):
+        """Инициализация базы данных и создание таблиц"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
 
-def init_db():
-    """Инициализация базы данных"""
-    schema = """
-    CREATE TABLE IF NOT EXISTS notes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        text TEXT NOT NULL CHECK(length(text) BETWEEN 1 AND 200),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(user_id, text) ON CONFLICT IGNORE
-    )
-    """
-    try:
-        with _connect() as conn:
-            conn.executescript(schema)
-        logger.info("Database initialized successfully")
-    except Exception as e:
-        logger.error(f"Error initializing database: {e}")
+            # Создаем таблицу моделей
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS models (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE,
+                    provider TEXT NOT NULL,
+                    active INTEGER DEFAULT 0 CHECK (active IN (0,1)),
+                    description TEXT,
+                    max_tokens INTEGER DEFAULT 4096,
+                    is_free INTEGER DEFAULT 0
+                )
+            ''')
 
-def add_note(user_id: int, text: str) -> int:
-    """Добавление новой заметки"""
-    try:
-        with _connect() as conn:
-            cur = conn.execute(
-                "INSERT INTO notes (user_id, text) VALUES (?, ?)",
-                (user_id, text)
-            )
+            # Создаем уникальный индекс для активной модели
+            cursor.execute('''
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_active_model 
+                ON models(active) WHERE active = 1
+            ''')
+
+            # Добавляем 10 моделей (если их еще нет)
+            models = [
+                # Бесплатные модели
+                ("openrouter/cinematika-7b", "OpenRouter", "Бесплатная модель для творчества", 8192, 1),
+                ("google/gemma-2b-it", "Google", "Легкая модель от Google", 8192, 1),
+                ("microsoft/phi-2", "Microsoft", "Компактная модель от Microsoft", 2048, 1),
+                ("huggingfaceh4/zephyr-7b-beta", "Hugging Face", "Быстрая и эффективная модель", 8192, 1),
+
+                # Платные (но недорогие) модели
+                ("openai/gpt-3.5-turbo", "OpenAI", "GPT-3.5 Turbo - баланс качества и скорости", 4096, 0),
+                ("anthropic/claude-3-haiku", "Anthropic", "Claude 3 Haiku - быстрая и умная", 200000, 0),
+                ("meta-llama/llama-3.1-8b-instruct", "Meta", "Llama 3.1 8B - открытая модель", 8192, 0),
+                ("google/gemini-pro-1.5", "Google", "Gemini Pro 1.5 - мощная модель", 1000000, 0),
+                ("mistralai/mistral-7b-instruct", "Mistral AI", "Mistral 7B - французская модель", 32768, 0),
+                ("cohere/command-r-plus", "Cohere", "Command R+ - для бизнес-задач", 128000, 0)
+            ]
+
+            # Проверяем, есть ли уже модели
+            cursor.execute("SELECT COUNT(*) FROM models")
+            count = cursor.fetchone()[0]
+
+            if count == 0:
+                # Добавляем модели, первую делаем активной
+                for i, (name, provider, description, max_tokens, is_free) in enumerate(models):
+                    active = 1 if i == 0 else 0  # Первую модель делаем активной
+                    cursor.execute('''
+                        INSERT INTO models (name, provider, active, description, max_tokens, is_free)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (name, provider, active, description, max_tokens, is_free))
+
             conn.commit()
-            logger.info(f"Note added for user {user_id}: {text[:20]}...")
-            return cur.lastrowid
-    except sqlite3.IntegrityError as e:
-        logger.warning(f"Duplicate note attempt by user {user_id}: {text[:20]}...")
-        raise e
 
-def list_notes(user_id: int, limit: int = 10):
-    """Получение списка заметок пользователя"""
-    with _connect() as conn:
-        cur = conn.execute(
-            """SELECT id, text, created_at 
-            FROM notes 
-            WHERE user_id = ? 
-            ORDER BY id DESC 
-            LIMIT ?""",
-            (user_id, limit)
-        )
-        return cur.fetchall()
+    def get_all_models(self) -> List[dict]:
+        """Получение списка всех моделей"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM models ORDER BY active DESC, is_free DESC, name")
+            return [dict(row) for row in cursor.fetchall()]
 
-def find_notes(user_id: int, query: str, limit: int = 10):
-    """Поиск заметок по тексту"""
-    with _connect() as conn:
-        cur = conn.execute(
-            """SELECT id, text 
-            FROM notes 
-            WHERE user_id = ? 
-            AND text LIKE '%' || ? || '%' 
-            ORDER BY id DESC 
-            LIMIT ?""",
-            (user_id, query, limit)
-        )
-        return cur.fetchall()
+    def get_active_model(self) -> Optional[dict]:
+        """Получение активной модели"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM models WHERE active = 1 LIMIT 1")
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
-def update_note(user_id: int, note_id: int, text: str) -> bool:
-    """Обновление заметки"""
-    with _connect() as conn:
-        cur = conn.execute(
-            """UPDATE notes 
-            SET text = ? 
-            WHERE user_id = ? AND id = ?""",
-            (text, user_id, note_id)
-        )
-        conn.commit()
-        logger.info(f"Note {note_id} updated by user {user_id}")
-        return cur.rowcount > 0
+    def set_active_model(self, model_id: int) -> bool:
+        """Установка активной модели"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
 
-def delete_note(user_id: int, note_id: int) -> bool:
-    """Удаление заметки"""
-    with _connect() as conn:
-        cur = conn.execute(
-            "DELETE FROM notes WHERE user_id = ? AND id = ?",
-            (user_id, note_id)
-        )
-        conn.commit()
-        logger.info(f"Note {note_id} deleted by user {user_id}")
-        return cur.rowcount > 0
+            # Блокируем запись и обновляем активность
+            cursor.execute("BEGIN IMMEDIATE")
 
-def count_notes(user_id: int) -> int:
-    """Подсчет количества заметок пользователя"""
-    with _connect() as conn:
-        cur = conn.execute(
-            "SELECT COUNT(*) as count FROM notes WHERE user_id = ?",
-            (user_id,)
-        )
-        result = cur.fetchone()
-        return result['count'] if result else 0
+            # Сбрасываем активность у всех моделей
+            cursor.execute("UPDATE models SET active = 0")
 
-def get_notes_statistics(user_id: int, days: int = 7):
-    """Статистика заметок за последние дни"""
-    with _connect() as conn:
-        cur = conn.execute(
-            """SELECT date(created_at) AS date, COUNT(*) AS count
-            FROM notes 
-            WHERE user_id = ? 
-            AND date(created_at) >= date('now', '-' || ? || ' days')
-            GROUP BY date(created_at) 
-            ORDER BY date DESC""",
-            (user_id, days)
-        )
-        return cur.fetchall()
+            # Устанавливаем активность выбранной модели
+            cursor.execute("UPDATE models SET active = 1 WHERE id = ?", (model_id,))
 
-def export_notes(user_id: int):
-    """Экспорт всех заметок пользователя"""
-    notes = list_notes(user_id, limit=1000)
-    return notes
+            conn.commit()
+
+            # Проверяем, обновлена ли модель
+            cursor.execute("SELECT COUNT(*) FROM models WHERE id = ? AND active = 1", (model_id,))
+            return cursor.fetchone()[0] > 0
