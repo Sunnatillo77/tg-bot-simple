@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 # Загружаем переменные окружения
 load_dotenv()
 
-# Настройка логирования для клиента
+# Настройка логирования для клиент
 logger = logging.getLogger(__name__)
 
 
