@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 db = Database()
 openrouter_client = OpenRouterClient()
 
-# Список команд для меню бот
+# Список команд для меню бота
 COMMANDS = [
     ("start", "Запустить бота"),
     ("help", "Показать справку"),
