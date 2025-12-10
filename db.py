@@ -210,7 +210,7 @@ class Database:
             return dict(row) if row else None
 
     def get_character_prompt(self, user_id: int) -> str:
-        """Получение промпта персонажа пользователя"""
+        """Получение промпта персонажа пользовател"""
         character = self.get_user_character(user_id)
         if character:
             return character['prompt']

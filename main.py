@@ -45,6 +45,32 @@ COMMANDS = [
 ]
 
 
+def _build_messages(character_prompt: str, question: str) -> list:
+    """
+    Формирует список сообщений для LLM на основе промпта персонажа и вопроса пользователя.
+    """
+    if not question or question.strip() == "":
+        return []
+
+    return [
+        {"role": "system", "content": character_prompt},
+        {"role": "user", "content": question}
+    ]
+
+
+def _build_messages_for_character(character_prompt: str, question: str) -> list:
+    """
+    Формирует список сообщений для LLM на основе промпта персонажа и вопроса пользователя.
+    Если вопрос пустой (или состоит только из пробелов), возвращает пустой список.
+    """
+    if not question or question.strip() == "":
+        return []
+    return [
+        {"role": "system", "content": character_prompt},
+        {"role": "user", "content": question}
+    ]
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     welcome_text = (
@@ -196,10 +222,10 @@ async def ask_model(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         character_prompt = db.get_character_prompt(user_id)
 
-        messages = [
-            {"role": "system", "content": character_prompt},
-            {"role": "user", "content": question}
-        ]
+        messages = _build_messages_for_character(character_prompt, question)
+        if not messages:
+            await update.message.reply_text("❌ Вопрос не может быть пустым.")
+            return
 
         # Отправляем запрос к OpenRouter
         response = openrouter_client.generate_response(
@@ -293,10 +319,10 @@ async def ask_model_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         character_prompt = db.get_character_prompt(user_id)
 
-        messages = [
-            {"role": "system", "content": character_prompt},
-            {"role": "user", "content": question}
-        ]
+        messages = _build_messages_for_character(character_prompt, question)
+        if not messages:
+            await update.message.reply_text("❌ Вопрос не может быть пустым.")
+            return
 
         # Отправляем запрос к OpenRouter
         response = openrouter_client.generate_response(
@@ -522,10 +548,10 @@ async def ask_random_character(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_chat_action("typing")
 
         # Формируем сообщения для модели
-        messages = [
-            {"role": "system", "content": random_character['prompt']},
-            {"role": "user", "content": question}
-        ]
+        messages = _build_messages_for_character(random_character['prompt'], question)
+        if not messages:
+            await update.message.reply_text("❌ Вопрос не может быть пустым.")
+            return
 
         # Отправляем запрос к OpenRouter
         response = openrouter_client.generate_response(
@@ -662,7 +688,6 @@ def main():
 
         # Обработчик ошибок
         application.add_error_handler(error_handler)
-
 
         print("🤖 Бот запускается...")
         print("📊 Команды:", [cmd[0] for cmd in COMMANDS])
